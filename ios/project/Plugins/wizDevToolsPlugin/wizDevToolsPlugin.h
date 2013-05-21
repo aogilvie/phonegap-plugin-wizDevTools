@@ -8,20 +8,10 @@
 
 #import <Foundation/Foundation.h>
 
-#import <UIKit/UIKit.h>
+#import <Cordova/CDVPlugin.h>
 
-#ifdef PHONEGAP_FRAMEWORK
-#import <PhoneGap/PGPlugin.h>
-#else
-#import "PGPlugin.h"
-#endif
-
-@interface UIWebView(ExceptionDebug)
-@end
-
-
-@interface wizDevToolsPlugin : PGPlugin
-    + (wizDevToolsPlugin*) sharedInstance;
-    - (PGPlugin*)initWithWebView:(UIWebView*)webView;
-    - (void)ready:(NSMutableArray*)arguments withDict:(NSMutableDictionary*)options;
+@interface wizDevToolsPlugin : CDVPlugin
++ (wizDevToolsPlugin *) sharedInstance;
+- (CDVPlugin *)initWithWebView:(UIWebView *)webView;
+- (void)ready:(CDVInvokedUrlCommand*)command;
 @end

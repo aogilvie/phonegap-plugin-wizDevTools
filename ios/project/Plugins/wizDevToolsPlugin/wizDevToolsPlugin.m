@@ -14,7 +14,7 @@
 @end
 
 #ifndef NDEBUG // Never build this plugin in RELEASE (will otherwise get rejected by Apple) !
-#import <PhoneGap/JSON.h>
+#import <Cordova/CDVJSON.h>
 #import <objc/runtime.h>
 
 
@@ -76,12 +76,17 @@ failedToParseSource:(NSString *)source
                     @"ParseError", @"type",
                     nil];
 
-    id documentURL = [[webFrame DOMDocument] URL];
-    __block NSString* json = [[[NSDictionary dictionaryWithObjectsAndKeys:
-                                [webView mainFrameTitle], @"mainFrameTitle",
-                                documentURL,              @"documentURL",
-                                exception,                @"exception",
-                                nil] JSONString] retain];
+    id documentURL = [[webFrame performSelector:@selector(DOMDocument)] URL];
+    NSDictionary *dict = [NSDictionary dictionaryWithObjectsAndKeys:
+                          [webView performSelector:@selector(mainFrameTitle)], @"mainFrameTitle",
+                          documentURL,              @"documentURL",
+                          exception,                @"exception",
+                          nil];
+    NSError *err;
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:dict
+                                                       options:NSJSONWritingPrettyPrinted
+                                                         error:&err];
+    __block NSString* json = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
 
     [[NSOperationQueue mainQueue] addOperationWithBlock:^{
         [[wizDevToolsPlugin sharedInstance] fireExceptionDebugEventWithJSONString:json];
@@ -160,12 +165,12 @@ exceptionWasRaised:(WebScriptCallFrame *)frame
     }
 
     // Ignore errors triggered by Cordova in blank pages
-    id documentURL = [[webFrame DOMDocument] URL];
+    id documentURL = [[webFrame performSelector:@selector(DOMDocument)] URL];
     if ([documentURL isEqualToString:@"about:blank"]) {
         return;
     }
 
-    id exception = [frame exception];
+    id exception = [frame  performSelector:@selector(exception)];
     NSString* type = nil;
     NSString* message = nil;
 
@@ -193,7 +198,7 @@ exceptionWasRaised:(WebScriptCallFrame *)frame
     WebScriptCallFrame* tmp = frame;
     NSMutableArray* callStack = [[[NSMutableArray alloc] init] autorelease];
     while (tmp) {
-        NSString* functionName = [tmp functionName];
+        NSString* functionName = [tmp performSelector:@selector(functionName)];
         if (!functionName) functionName = @"<anonymous>";
         CallFrameInfo* callFrameInfo = [callFrames objectForKey:[NSValue valueWithNonretainedObject:tmp]];
         Source* callFrameSource = [SOURCES objectForKey:[NSNumber numberWithInt:callFrameInfo.sid]];
@@ -210,15 +215,20 @@ exceptionWasRaised:(WebScriptCallFrame *)frame
                               callFrameLineNumber, @"lineNumber",
                               callFrameLine,       @"line",
                               nil]];
-        tmp = [tmp caller];
+        tmp = [tmp performSelector:@selector(caller)];
     }
 
-    __block NSString* json = [[[NSDictionary dictionaryWithObjectsAndKeys:
-                       callStack,                @"callStack",
-                       [webView mainFrameTitle], @"mainFrameTitle",
-                       documentURL,              @"documentURL",
-                       exception,                @"exception",
-                       nil] JSONString] retain];
+    NSDictionary *dict = [NSDictionary dictionaryWithObjectsAndKeys:
+                          callStack,                @"callStack",
+                          [webView performSelector:@selector(mainFrameTitle)], @"mainFrameTitle",
+                          documentURL,              @"documentURL",
+                          exception,                @"exception",
+                          nil];
+    NSError *err;
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:dict
+                                                       options:NSJSONWritingPrettyPrinted
+                                                         error:&err];
+    __block NSString* json = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
 
     [[NSOperationQueue mainQueue] addOperationWithBlock:^{
         [[wizDevToolsPlugin sharedInstance] fireExceptionDebugEventWithJSONString:json];
@@ -229,7 +239,7 @@ exceptionWasRaised:(WebScriptCallFrame *)frame
 - (void)webView:(id)sender didClearWindowObject:(id)windowObject forFrame:(WebFrame*)frame
 {
     if ([sender respondsToSelector:@selector(setScriptDebugDelegate:)]) {
-        [sender setScriptDebugDelegate:self];
+        [sender performSelector:@selector(setScriptDebugDelegate:) withObject:self];
     }
 }
 @end
@@ -238,7 +248,6 @@ exceptionWasRaised:(WebScriptCallFrame *)frame
 static wizDevToolsPlugin* instance = nil;
 
 
-#import "WizUtils.h"
 #import "WizDebugLog.h"
 #include <unistd.h>
 
@@ -251,7 +260,7 @@ static wizDevToolsPlugin* instance = nil;
 
 
 
-- (PGPlugin*)initWithWebView:(UIWebView*)webView {
+- (CDVPlugin*)initWithWebView:(UIWebView*)webView {
     self = [super initWithWebView:webView];
     if (self) {
         if (instance)
@@ -271,9 +280,9 @@ static wizDevToolsPlugin* instance = nil;
 
 
 
-- (void)ready:(NSMutableArray*)arguments withDict:(NSMutableDictionary*)options {
+- (void)ready:(CDVInvokedUrlCommand*)command {
     // Function called by Javascript to have PhoneGap load the plugin
-    [self writeJavascript: [[PluginResult resultWithStatus:PGCommandStatus_OK] toSuccessCallbackString:[arguments pop]]];
+    [self writeJavascript: [[CDVPluginResult resultWithStatus:CDVCommandStatus_OK] toSuccessCallbackString:command.callbackId]];
 }
 
 - (void) fireExceptionDebugEventWithJSONString:(NSString*)jsonString {
